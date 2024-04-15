@@ -1,2 +1,2 @@
-# dales_ruisdael_emission_new
-Dutch Atmospheric Large-Eddy Simulation model with revised emission module
+# DALES 4.4
+Dutch Atmospheric Large-Eddy Simulation model version 4.4 with revised emission module
