@@ -54,6 +54,7 @@ module modlsm
 
     ! Dependency factor canopy resistance on VPD (high veg only)
     real, allocatable :: gD(:,:)
+    
 
     ! Reduction functions canopy resistance
     real, allocatable :: f1(:,:), f2_lv(:,:), f2_hv(:,:), f2b(:,:), f3(:,:)
@@ -61,7 +62,12 @@ module modlsm
     ! Random
     real, allocatable :: du_tot(:,:), thv_1(:,:), land_frac(:,:)
 
-    ! A-Gs
+    ! A-gs:
+    
+    ! A-gs vegetation type/index
+    integer, allocatable :: index_ags(:,:)
+    
+    !net assimilation and soil respiration:
     real, allocatable :: an_co2(:,:), resp_co2(:,:)
     integer :: co2_index = -1
 
@@ -365,27 +371,39 @@ subroutine calc_canopy_resistance_ags
     integer :: i, j, k, si
     
     real, dimension(i1, j1) :: tskin_copy
+    
+    ! Define the vegetation type variable
+    integer :: veg_type
 
     ! Fixed constants (** = same in DALES and IFS, !! = different in DALES and IFS)
-    real, parameter :: Q10gm = 2.0        ! (**) Parameter to calculate the mesophyll conductance [-]
-    real, parameter :: Q10am = 2.0        ! (**) Parameter to calculate max primary productivity [-]
-    real, parameter :: Q10lambda = 1.5    ! (!!) Parameter to calculate the CO2 compensation concentration. (2 in IFS, 1.5 in DALES) [-]
+    ! Now, some constants are put in array with two separate vegetation types: grassland (1) and forest (2): Arseni
+    
+    ! Define constants: 
+    real :: Q10gm, Q10am, Q10lambda, T1gm, T2gm, T1Am, T2Am, gmin, ad, Kx, alpha0, R10, gm298, Ammax298, f0, co2_comp298
+    
+    
+    real, dimension(2) :: Q10gm_array = [2.0, 2.0]       ! (**) Parameter to calculate the mesophyll conductance [-]
+    real, dimension(2) :: Q10am_array = [2.0, 2.0]        ! (**) Parameter to calculate max primary productivity [-]
+    real, dimension(2) :: Q10lambda_array = [1.5, 1.5]    ! (!!) Parameter to calculate the CO2 compensation concentration. (2 in IFS, 1.5 in DALES) [-]
 
-    ! Reference temperatures calculation mesophyll conductance:
-    real, parameter :: T1gm = 278         ! (**)
-    real, parameter :: T2gm = 301         ! (!!: IFS=309, DALES=301 (default), 309 (C4))
+	! Reference temperatures calculation mesophyll conductance:
+    real, dimension(2) :: T1gm_array = [278, 278]         ! (**)
+    real, dimension(2) :: T2gm_array = [301, 305]         ! (!!: IFS=309, DALES=301 (default), 309 (C4))
 
     ! Reference temperatues calculation max primary productivity:
-    real, parameter :: T1Am = 286         ! (!!: IFS=281, DALES=286 (C4))
-    real, parameter :: T2Am = 311         ! (**)
+    real, dimension(2) :: T1Am_array = [286, 281]        ! (!!: IFS=281, DALES=286 (C4))
+    real, dimension(2) :: T2Am_array = [311, 311]         ! (**)
+
 
     real, parameter :: nuco2q = 1.6       ! Ratio molecular viscosity water to carbon dioxide
-    real, parameter :: gmin = 2.5e-4      ! Cuticular (minimum) conductance. NOTE: = g_cu in IFS?
-    real, parameter :: ad =  0.07         ! Regression coefficient to calculate Cfrac
-    real, parameter :: Kx = 0.7           ! Extinction coefficient PAR
+	real, dimension(2) :: gmin_array = [2.5e-4, 2.5e-4]      ! Cuticular (minimum) conductance. NOTE: = g_cu in IFS?
+    real, dimension(2) :: ad_array =  [0.07, 0.07]         ! Regression coefficient to calculate Cfrac
+    real, dimension(2) :: Kx_array = [0.7,  0.7]          ! Extinction coefficient PAR [mground m−1leaf]
+
 
     !????
-    real, parameter :: alpha0 =  0.014    ! Initial low light conditions (?)
+    real, dimension(2) :: alpha0_array =  [0.014, 0.017]    ! Light use efficiency at low light conditions (mg J−1)
+
 
     real, parameter :: Mair = 28.97
     real, parameter :: Mco2 = 44.01
@@ -394,17 +412,16 @@ subroutine calc_canopy_resistance_ags
     real, parameter :: Cw = 1.6e-3        ! Constant water stress correction
     real, parameter :: wsmax = 0.55       ! Upper reference value soil water   # NOTE: I guess these are soil dependant?
     real, parameter :: wsmin = 0.005      ! Lower reference value soil water   # NOTE: see line above :-)
-    real, parameter :: R10 =   0.23       ! Respiration at 10oC (Jacobs 2007)
+    real, dimension(2) :: R10_array =   [0.23, 0.1]       ! Respiration at 10oC (Jacobs 2007)
     real, parameter :: Eact0 = 53.3e3     ! Activation energy
 
     ! Vegetation specific constants
     ! TODO: link to lookup table IFS, for now hardcoded for single veg type.....
-    real, parameter :: gm298 = 7 !1.3     ! (mm s-1) NOTE: Much lower than DALES...
-    real, parameter :: Ammax298 = 1.7     ! CO2 maximal primary productivity
-    real, parameter :: f0 = 0.85          ! Maximum value Cfrac (constant or equation in IFS)
-    real, parameter :: co2_comp298 = 68.5 ! CO2 compensation concentration = Lambda(25) in IFS [mg m−3]
-	
-	real, parameter :: default_value = 1.0  ! Replace with a suitable default value
+    ! Vegetation specific constants  
+    real, dimension(2) :: gm298_array = [7.0, 3.0] ! Mesophyll conductance at 298 K [mm s-1] NOTE: Much lower than DALES...
+    real, dimension(2) :: Ammax298_array = [1.7, 2.2] ! CO2 maximal primary productivity [mg CO2 m-2 s-1]
+    real, dimension(2) :: f0_array = [0.85, 0.89]          ! Maximum value Cfrac (constant or equation in IFS)
+    real, dimension(2) :: co2_comp298_array = [68.5, 68.5] ! CO2 compensation concentration = Lambda(25) in IFS [ppm]
 
     ! For sw_splitleaf
     !nr_gauss = 3                                 ! Amount of bins to use for Gaussian integrations
@@ -424,8 +441,54 @@ subroutine calc_canopy_resistance_ags
         do i=2,i1
        	 	
        	 	tskin_copy(i,j)=tskin(i, j)
+       	 	
+       	 	!Get the vegetation type for current grid point:
+            veg_type = index_ags(i, j)
 
-       	 	! Check if tskin(i, j) is NaN
+            !Check the veg_type and select the appropriate constants:
+            if (veg_type == 1) then
+            
+                ! Grassland constants
+                Q10gm = Q10gm_array(1)
+                Q10am = Q10am_array(1)
+                Q10lambda = Q10lambda_array(1)
+                T1gm = T1gm_array(1)
+                T2gm = T2gm_array(1)
+                T1Am = T1Am_array(1)
+                T2Am = T2Am_array(1)
+                gmin = gmin_array(1)
+                ad = ad_array(1)
+                Kx = Kx_array(1)
+                alpha0 = alpha0_array(1)
+                R10 = R10_array(1)
+                gm298 = gm298_array(1)
+                Ammax298 = Ammax298_array(1)
+                f0 = f0_array(1)
+                co2_comp298 = co2_comp298_array(1)
+
+            else if (veg_type == 2) then
+            
+                ! Forest constants
+                Q10gm = Q10gm_array(2)
+                Q10am = Q10am_array(2)
+                Q10lambda = Q10lambda_array(2)
+                T1gm = T1gm_array(2)
+                T2gm = T2gm_array(2)
+                T1Am = T1Am_array(2)
+                T2Am = T2Am_array(2)
+                gmin = gmin_array(2)
+                ad = ad_array(2)
+                Kx = Kx_array(2)
+                alpha0 = alpha0_array(2)
+                R10 = R10_array(2)
+                gm298 = gm298_array(2)
+                Ammax298 = Ammax298_array(2)
+                f0 = f0_array(2)
+                co2_comp298 = co2_comp298_array(2)
+            end if
+
+
+       	 	!Check if tskin(i, j) is NaN
         	if (isnan(tskin_copy(i, j))) then
             	
             	! Surface resistances for moisture and carbon dioxide:
@@ -441,7 +504,7 @@ subroutine calc_canopy_resistance_ags
             	
        	 	else
     			
-    			! Check if tskin_copy(i, j) less than 200 or more than 350, and replace with 287.
+    			!Check if tskin_copy(i, j) less than 200 or more than 350, and replace with 287.
         		if ((tskin_copy(i, j).lt.200.).OR.(tskin(i, j).gt.350.)) then
             		tskin_copy(i, j) = 287.
        	 		endif
@@ -454,7 +517,7 @@ subroutine calc_canopy_resistance_ags
             	! Calculate the CO2 compensation concentration (IFS eq. 8.92)
             	! "The compensation point Γ is defined as the CO2 concentration at which the net CO2 assimilation of a fully lit leaf becomes zero."
             	! NOTE: The old DALES LSM used the atmospheric `thl`, IFS uses the surface temperature.
-            	co2_comp = rhof(1) * co2_comp298 * Q10lambda**(0.1 * (Ts - 298.0)) ![mg m-3?]
+            	co2_comp = rhof(1) * co2_comp298 * Q10lambda**(0.1 * (Ts - 298.0)) 
 
            	 	! Calculate the mesophyll conductance (IFS eq. 8.93)
             	! "The mesophyll conductance gm describes the transport of CO2 from the substomatal cavities to the mesophyll cells where the carbon is fixed."
@@ -483,12 +546,12 @@ subroutine calc_canopy_resistance_ags
             	!cfrac = f0 * (1.0 - Ds/Dmax) + fmin * (Ds/Dmax)
             	cfrac = max(0.01, f0 * (1.0 - Ds/Dmax) + fmin * (Ds/Dmax))
 
-            	! Absolute CO2 concentration [mg m−3?]:
+            	! Absolute CO2 concentration:
             	if (l_emission) then
-            		co2_abs =  (svm(i,j,1,svco2sum)*1000*(Mair/Mco2))*from_ppb !(svm scalar tasers for gases are in ug/g now, so converted first to ppb and after to abs)
+            		co2_abs =  (svm(i,j,1,svco2sum)*1000*(Mair/Mco2))*from_ppb !(svm scalar tacers for gases are in ug/g now, so converted first to ppb and after to abs)
 			    	
             	else
-                	co2_abs =  (svm(i,j,1,svco2sum)*1000*(Mair/Mco2))*from_ppb !(svm scalar tasers for gases are in ug/g now, so converted first to ppb and after to abs)
+                	co2_abs =  (svm(i,j,1,co2_index)*1000*(Mair/Mco2))*from_ppb !(svm scalar tacers for gases are in ug/g now, so converted first to ppb and after to abs)
 
 				endif
 				
@@ -508,7 +571,7 @@ subroutine calc_canopy_resistance_ags
             !  ci              = cfrac * (co2_abs - co2_comp) + co2_comp
             !endif
 
-            	! CO2 concentration in leaf (IFS eq. ???): [mg m−3 ?]
+            	! CO2 concentration in leaf (IFS eq. ???): 
             	ci = cfrac * (co2_abs - co2_comp) + co2_comp
 
             	! Max gross primary production in high light conditions (Ag) (IFS eq. 8.94)
@@ -518,14 +581,19 @@ subroutine calc_canopy_resistance_ags
             	! Effect of soil moisture stress on gross assimilation rate.
            	 	! NOTE: this seems to be different in IFS...
             	! NOTE: for now, this uses the relative soil moisture content from the low vegetation only!
-            	fstr = max(1.0e-3, min(1.0, tile_lv%phiw_mean(i,j)))
-            
+            	!fstr = max(1.0e-3, min(1.0, tile_lv%phiw_mean(i,j)))
+            	
+            	!NOTE: this uses the relative soil moisture content for both low and high vegetation
+            	! We check the veg_type and select the appropriate tile (for grass -> lv for forest -> hv):
+            	if (veg_type == 1) then
+            		fstr = max(1.0e-3, min(1.0, tile_lv%phiw_mean(i,j)))
+            	else if (veg_type == 2) then
+            		fstr = max(1.0e-3, min(1.0, tile_hv%phiw_mean(i,j)))
+            	end if
 
             	! Gross assimilation rate (Am, IFS eq. 8.97)
             	Am = Ammax * (1 - exp(-(gm * (ci - co2_comp) / Ammax)))
             	
-            		
-            
             	if((Am.lt.0.01).OR.(isnan(Am))) then	!I fix Am.lt.0.01 as threshold 
             											!since Am below could cause problems later in the An calculation !Arseni
             
@@ -545,7 +613,6 @@ subroutine calc_canopy_resistance_ags
             		! Autotrophic dark respiration (IFS eq. 8.99)
             		Rdark = Am/9.
             
-            
 
             		!PAR = 0.40 * max(0.1,-swdav * cveg(i,j))
             		PAR = 0.5 * max(0.1, -swd(i,j,1))
@@ -554,7 +621,6 @@ subroutine calc_canopy_resistance_ags
             		alphac = alpha0 * (co2_abs - co2_comp) / (co2_abs + 2*co2_comp)
                       
             
-
             		if (lsplitleaf) then
                 		print*,'Splitleaf A-Gs not (yet) implemented!'
                 		stop
@@ -626,10 +692,28 @@ subroutine calc_canopy_resistance_ags
                 		Dstar  = Dmax / (AGSa1 * (f0 - fmin))
                 		tempy  = alphac * Kx * PAR / (Am + Rdark)
 
-    					An = (Am + Rdark) * (1 - 1.0 / (Kx * tile_lv%lai(i, j)) * (E1(tempy * exp(-Kx * tile_lv%lai(i, j))) - E1(tempy)))
+    					!An = (Am + Rdark) * (1 - 1.0 / (Kx * tile_lv%lai(i, j)) * (E1(tempy * exp(-Kx * tile_lv%lai(i, j))) - E1(tempy)))
 						
-                		!An = (Am + Rdark) * (1.0 - 1.0 / denominator * (E1(tempy * exp_term) - E1(tempy)))
-                		gc_inf = tile_lv%lai(i,j) * (gmin/nuco2q + AGSa1 * fstr * An / ((co2_abs - co2_comp) * (1 + Ds / Dstar)))
+                		!!An = (Am + Rdark) * (1.0 - 1.0 / denominator * (E1(tempy * exp_term) - E1(tempy)))
+                		!gc_inf = tile_lv%lai(i,j) * (gmin/nuco2q + AGSa1 * fstr * An / ((co2_abs - co2_comp) * (1 + Ds / Dstar)))
+            		
+            			
+            			! NOTE: this uses LAI from both low and high vegetation:
+            			! We check the veg_type and select the appropriate tile (for grass -> lv for forest -> hv)
+            			if (veg_type == 1) then
+            				
+            				An = (Am + Rdark) * (1 - 1.0 / (Kx * tile_lv%lai(i, j)) * (E1(tempy * exp(-Kx * tile_lv%lai(i, j))) - E1(tempy)))
+                			gc_inf = tile_lv%lai(i,j) * (gmin/nuco2q + AGSa1 * fstr * An / ((co2_abs - co2_comp) * (1 + Ds / Dstar)))
+            		
+            			else if (veg_type == 2) then
+            				
+            				An = (Am + Rdark) * (1 - 1.0 / (Kx * tile_hv%lai(i, j)) * (E1(tempy * exp(-Kx * tile_hv%lai(i, j))) - E1(tempy)))
+                			gc_inf = tile_hv%lai(i,j) * (gmin/nuco2q + AGSa1 * fstr * An / ((co2_abs - co2_comp) * (1 + Ds / Dstar)))
+            		
+            			end if
+            		
+            		
+            		
             		endif
 
             		if (lrelaxgc) then
@@ -660,7 +744,17 @@ subroutine calc_canopy_resistance_ags
             		th_mean = th_mean / (-zh_soil(1))
 
             		! Sub-grid fractions of low+high veg, and low+high veg + bare soil
-            		cveg = tile_lv%base_frac(i,j) + tile_hv%base_frac(i,j)
+            		!cveg = tile_lv%base_frac(i,j) + tile_hv%base_frac(i,j)
+            		
+            		!veg is selected based on veg_type:
+            		!We check the veg_type and select the appropriate tile (for grass -> lv for forest -> hv)
+            		if (veg_type == 1) then
+            			cveg = tile_lv%base_frac(i,j)
+            		else if (veg_type == 2) then
+            			cveg = tile_hv%base_frac(i,j)
+            		end if
+            
+            		
             		cland = cveg + tile_bs%base_frac(i,j)
 
             		! Water stress function:
@@ -681,7 +775,6 @@ subroutine calc_canopy_resistance_ags
             		if(isnan(tile_lv%rs(i,j))) tile_lv%rs(i,j)=100.  ! s m-1
             		if(isnan(tile_hv%rs(i,j))) tile_hv%rs(i,j)=100.  ! s m-1
             		if(isnan(tile_bs%rs(i,j))) tile_bs%rs(i,j)=100.  ! s m-1
-            		if(isnan(tile_ws%rs(i,j))) tile_ws%rs(i,j)=100.  ! s m-1
 
             		rs_co2 = 1. / gcco2
 
@@ -694,14 +787,32 @@ subroutine calc_canopy_resistance_ags
 
             		! Calculate net assimilation
             		! NOTE: this uses the aerodynamic resistance from low vegetation...
-            		an_co2(i,j) = -(co2_abs - ci) / (tile_lv%ra(i,j) + rs_co2)
+            		!an_co2(i,j) = -(co2_abs - ci) / (tile_lv%ra(i,j) + rs_co2)
+            		
+            		!NOTE: this uses the aerodynamic resistance from both low and high vegetations:
+            		! We check the veg_type and select the appropriate tile (for grass -> lv for forest -> hv)
+            		if (veg_type == 1) then
+            			an_co2(i,j) = -(co2_abs - ci) / (tile_lv%ra(i,j) + rs_co2)
+
+            		else if (veg_type == 2) then
+            			an_co2(i,j) = -(co2_abs - ci) / (tile_hv%ra(i,j) + rs_co2)
+            		end if
+            		
+            		
             		! Scale with vegetation + bare soil fraction, and translate to `ug/g m s-1`.
             		an_co2(i,j) = cland * an_co2(i,j)*((Mco2/Mair)/1000) * to_ppb
             		
             		!Replace unreasonable values with 0:
-            		if ((an_co2(i,j)>0.) .OR. (an_co2(i,j)<-120.)) an_co2(i,j)=0.
-					if ((resp_co2(i,j)<0.) .OR. (resp_co2(i,j)>120.)) resp_co2(i,j)=0.
-			
+            		if ((an_co2(i,j)>0.) .OR. (an_co2(i,j)<-150.)) an_co2(i,j)=0.
+					if ((resp_co2(i,j)<0.) .OR. (resp_co2(i,j)>150.)) resp_co2(i,j)=0.
+					
+					
+					!Only for the sanity check of forest vegetation, here, we nullify all others grid points:
+					!if (veg_type .ne. 2) then
+						!an_co2(i,j)=0
+					!endif
+					
+						
 				endif
 			endif		
 			
@@ -1429,7 +1540,7 @@ subroutine exitlsm
     deallocate( theta_res, theta_wp, theta_fc, theta_sat, gamma_theta_sat, vg_a, vg_l, vg_n )
 
     ! Allocated from `allocate_fields`:
-    deallocate( soil_index, tsoil, tsoilm, phiw, phiwm, phiw_source )
+    deallocate( soil_index, tsoil, tsoilm, phiw, phiwm, phiw_source, index_ags )
     deallocate( wl, wlm, wl_max )
     deallocate( throughfall, interception )
     deallocate( gD, f1, f2_lv, f2_hv, f2b, f3 )
@@ -1593,6 +1704,9 @@ subroutine allocate_fields
         allocate(an_co2(i2, j2))
         allocate(resp_co2(i2, j2))
     endif
+    
+    ! A-Gs vegetation type/index
+    allocate(index_ags(i2, j2))
 
     ! Allocate the tiled variables
     call allocate_tile(tile_lv)
@@ -1948,6 +2062,10 @@ subroutine init_heterogeneous
         wl(:,:)  = 0.
         wlm(:,:) = 0.
     end if
+    
+    ! A-Gs vegetation type/index
+    read(666) index_ags(2:i1, 2:j1)
+    
 
     close(666)
 

@@ -64,6 +64,8 @@ SAVE
   real              :: rootfav (ksoilmax)
   real, allocatable :: tsoil   (:,:,:)    !<  Soil temperature [K]
   real, allocatable :: tsoilm  (:,:,:)    !<  Soil temperature previous time step [K]
+  
+  integer, allocatable :: index_ags(:,:)  !< A-Gs vegetation type/index
   real              :: tsoilav (ksoilmax)
   real, allocatable :: tsoildeep (:,:)    !<  Soil temperature [K]
   real              :: tsoildeepav
