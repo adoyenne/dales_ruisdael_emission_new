@@ -311,10 +311,11 @@ endif
         			((1.0 - emistime_s) * emisfield(2:i1, 2:j1, k, l, 1) + &
         			emistime_s * emisfield(2:i1, 2:j1, k, l, 2)) / &
         			(3600.0 * rhof(k) * dzf(k) * dx * dy * 1.0e-6)
-        			
-   			 end if
+        	
+        	end if
   		end do
 	end do
+
 
 
     ! -----
@@ -517,8 +518,8 @@ end subroutine readpoints
 
     implicit none
 	
-    integer :: ipoint, ix, iy, iz, isv, izt, izb, l, iheight, i, count
-    real    :: emis_b,emis_a, emis_int
+    integer :: ipoint, ix, iy, iz, isv, izt, izb, l, iheight, i, count, k
+    real    :: emis_b,emis_a, emis_int, emis_top, emis_bot, emis_in_between
     real    :: plume_top_fraction, plume_bottom_fraction, plumefactor
 	
 	real            :: emistime_s, emistime_e ! Emission timers
@@ -586,23 +587,33 @@ end subroutine readpoints
 		emistime_s = mod(rtimee +       1800., 3600.)*div3600
 	   
 		emis_int=((1. - emistime_s)*emis_b + emistime_s *emis_a)
+		
        
        !-------------------------------------------------------------------------------------------------
        
        ! Emissions are per source, so refactor to emission per gridbox
        ! ALSO: Emissions are per source, per hour so refactor to account for pressure, gridboxsize and seconds below:
-       
-       
+            
+		
+
+
+
        if (izt - izb > 1) then
-       		 plumefactor =  1/(izt - izb + plume_top_fraction + plume_bottom_fraction - 1)
+       		 !plumefactor =  1/((izt - izb-1) + plume_top_fraction + plume_bottom_fraction ) 
+       		 
+       		 emis_top = (emis_int / (izt - izb + 1)) * plume_top_fraction
+			 emis_bot = (emis_int / (izt - izb + 1)) * plume_bottom_fraction
+			 emis_in_between = ((emis_int- emis_bot - emis_top) / (izt - izb - 1)) 
+       		 
+       		if ((plume_top_fraction>1) .OR. (plume_bottom_fraction>1) .OR. (plume_top_fraction<0) .OR. (plume_bottom_fraction<0)) then
+       			print*,'plume_top_fraction, plume_bottom_fraction', plume_top_fraction, plume_bottom_fraction
+       		endif
+       
        end if
        
 	    
 	   ! Apply interpolated-in-time point source emissions:
 		!-------------------------------------------------------------------------------------------------
-       
-       !emis_int is divided by number of vertical layers from plume_bottom to plume_top
-       ! to put fraction of emission at each layer!
 	   
 	  do l = svskip+1, nsv
     	
@@ -613,9 +624,15 @@ end subroutine readpoints
     			svp(ix, iy, izb, l) = svp(ix, iy, izb, l) + (emis_int/2) / (3600. * rhof(izb) * dzf(izb) * dx * dy * 1e-6)
     			svp(ix, iy, izt, l) = svp(ix, iy, izt, l) + (emis_int/2) / (3600. * rhof(izt) * dzf(izt) * dx * dy * 1e-6)
   			else if (izt - izb > 1) then
-    			svp(ix, iy, izb, l) = svp(ix, iy, izb, l) + emis_int * plumefactor * plume_bottom_fraction / (3600. * rhof(izb) * dzf(izb) * dx * dy * 1e-6)
-    			svp(ix, iy, izt, l) = svp(ix, iy, izt, l) + emis_int * plumefactor * plume_top_fraction / (3600. * rhof(izt) * dzf(izt) * dx * dy * 1e-6)
-    			svp(ix, iy, izb+1:izt-1, l) = svp(ix, iy, izb+1:izt-1, l) + emis_int * plumefactor / (3600. * rhof(izb+1:izt-1) * dzf(izb+1:izt-1) * dx * dy * 1e-6)
+    			
+    			
+    			svp(ix, iy, izb, l) = svp(ix, iy, izb, l) + emis_bot/ (3600. * rhof(izb) * dzf(izb) * dx * dy * 1e-6)
+    			svp(ix, iy, izt, l) = svp(ix, iy, izt, l) + emis_top/ (3600. * rhof(izt) * dzf(izt) * dx * dy * 1e-6)
+    			
+    			
+    			do k = izb+1, izt-1
+    				svp(ix, iy, k, l) = svp(ix, iy, k, l) + emis_in_between/ (3600. * rhof(k) * dzf(k) * dx * dy * 1e-6)
+    			enddo
   			end if
 		end if
 	
