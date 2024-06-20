@@ -571,11 +571,11 @@ end subroutine readpoints
                     sqrt(v0(ix,iy,1:kmax)**2 + u0(ix,iy,1:kmax)**2), & !windspeed profile at point source
 
                     point_source_data(ipoint,4,1), &       ! Source temperature
-                    point_source_data(ipoint,5,1), &       ! Source volume flux
+                    point_source_data(ipoint,5,1), &       ! Source volumetric flux rate
                     point_source_data(ipoint,3,1), &       ! Source stack height
 
                     izt, plume_top_fraction, &  ! This index should be in full levels
-                    izb, plume_bottom_fraction) ! plume top/bottom include the partially filled levels
+                    izb, plume_bottom_fraction, emis_b) ! plume top/bottom include the partially filled levels
        
        
        	
@@ -641,18 +641,19 @@ end subroutine readpoints
 
   end subroutine applypoints
 
-  subroutine briggs(Ta, u, Ts, Vs, hs, iztop, ztop_frac, izbottom, zbottom_frac)
+  subroutine briggs(Ta, u, Ts, Vs, hs, iztop, ztop_frac, izbottom, zbottom_frac, emis_b)
   
 	!Algorithm to calculate the vertical plume rise above the stack height
 	!The detail description can be found in Gordon et al., (2017) and Akingunola et al., (2018)
 
     use modglobal,   only : zh, zf, dzf, kmax
+
     !----------
-    ! Ta Atmospheric temperature
-    ! u  Wind speed
-    ! Ts Emission temperature
-    ! Vs Emission volume flux
-    ! hs Emission stack height
+    ! Ta Atmospheric temperature, K
+    ! u  Wind speed, m/s
+    ! Ts Emission temperature K
+    ! Vs Emission volumetric flux rate m³/s
+    ! hs Emission stack height, m
     ! tzh Atmospheric temperature at half-level grid
     ! uzh Wind speed at half-level grid
     ! ths Atmospheric temperature at stack height
@@ -668,7 +669,7 @@ end subroutine readpoints
 
     implicit none
 
-    real, intent(in)  :: Ts, hs, vs
+    real, intent(in)  :: Ts, hs, vs, emis_b
     real, dimension(kmax), intent(in) :: Ta, u
     integer, intent(out) :: iztop, izbottom
     real,    intent(out) :: ztop_frac, zbottom_frac
@@ -682,6 +683,10 @@ end subroutine readpoints
 						pi = 3.1415926535897932
 						
 	real, dimension(kmax+1) :: tzh, uzh
+	
+	!character(len=100) :: format_string
+	
+
 
     
 	!Ta and U at half-level grid using simple avaraging:
@@ -834,8 +839,9 @@ end subroutine readpoints
 	zbottom = 0.0000001
 	ztop = 0.0000001
  
-    zbottom = hs - hmax*0.5            	
-
+    zbottom = hs - hmax*0.5 
+    
+  
 
   ! Attempt to handle the problematic conditions
   if (isnan(zbottom) .or. isnan(S)) then
@@ -853,6 +859,12 @@ end subroutine readpoints
 	if (isnan(ztop)) ztop = 0.0000001
 	
 	if(ztop<zbottom) ztop = zbottom
+	
+	! Create the format string dynamically
+    !format_string = '(F12.3, F12.3, F12.3, F12.3, F12.3)'
+	
+	! Print the values in a formatted way using the format string
+    !write(*, format_string) hmax, hs, Ts, vs, emis_b
 	
               
 	

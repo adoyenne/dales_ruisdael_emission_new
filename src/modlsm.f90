@@ -345,12 +345,14 @@ subroutine calc_canopy_resistance_js
 
 end subroutine calc_canopy_resistance_js
 
+
+subroutine calc_canopy_resistance_ags
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Calculate canopy and soil resistances using A-Gs (plant physiology).
 ! In addition, this calculates/sets the net CO2 fluxes...
 ! https://studenttheses.uu.nl/bitstream/handle/20.500.12932/31851/5764149,%20E.%20Merritt%20Master%27s%20Thesis%20SD.pdf?sequence=3
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine calc_canopy_resistance_ags
+
     use modglobal,   only : i1, j1
     use modfields,   only : rhof, exnh, qt0, presf, svm
     use modsurface,  only : E1, ps
@@ -490,6 +492,7 @@ subroutine calc_canopy_resistance_ags
 
        	 	!Check if tskin(i, j) is NaN
         	if (isnan(tskin_copy(i, j))) then
+        	
             	
             	! Surface resistances for moisture and carbon dioxide:
            		tile_lv%rs(i,j) = 0.
@@ -503,6 +506,8 @@ subroutine calc_canopy_resistance_ags
             	        	
             	
        	 	else
+       	 
+  
     			
     			!Check if tskin_copy(i, j) less than 200 or more than 350, and replace with 287.
         		if ((tskin_copy(i, j).lt.200.).OR.(tskin(i, j).gt.350.)) then
@@ -2009,6 +2014,10 @@ subroutine init_heterogeneous
     write(input_file(10:12), '(i3.3)') myidx
     write(input_file(14:16), '(i3.3)') myidy
     write(input_file(18:20), '(i3.3)') iexpnr
+    
+    ! Open the unformatted files and read the heterogeneous lsm input
+	print*,'Reading heterogeneous input for lsm, files: ',input_file
+    
 
     open(666, file=input_file, form='unformatted', status='unknown', action='read', access='stream')
 
