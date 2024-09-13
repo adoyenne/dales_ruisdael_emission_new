@@ -811,12 +811,6 @@ subroutine calc_canopy_resistance_ags
             		if ((an_co2(i,j)>0.) .OR. (an_co2(i,j)<-150.)) an_co2(i,j)=0.
 					if ((resp_co2(i,j)<0.) .OR. (resp_co2(i,j)>150.)) resp_co2(i,j)=0.
 					
-					
-					!Only for the sanity check of forest vegetation, here, we nullify all others grid points:
-					!if (veg_type .ne. 2) then
-						!an_co2(i,j)=0
-					!endif
-					
 						
 				endif
 			endif		

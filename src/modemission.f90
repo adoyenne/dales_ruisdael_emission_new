@@ -571,7 +571,7 @@ end subroutine readpoints
                     sqrt(v0(ix,iy,1:kmax)**2 + u0(ix,iy,1:kmax)**2), & !windspeed profile at point source
 
                     point_source_data(ipoint,4,1), &       ! Source temperature
-                    point_source_data(ipoint,5,1), &       ! Source volumetric flux rate
+                    point_source_data(ipoint,5,1), &       ! Source volumetric flow rate
                     point_source_data(ipoint,3,1), &       ! Source stack height
 
                     izt, plume_top_fraction, &  ! This index should be in full levels
@@ -652,7 +652,7 @@ end subroutine readpoints
     ! Ta Atmospheric temperature, K
     ! u  Wind speed, m/s
     ! Ts Emission temperature K
-    ! Vs Emission volumetric flux rate m³/s
+    ! Vs Emission volumetric flow rate m³/s
     ! hs Emission stack height, m
     ! tzh Atmospheric temperature at half-level grid
     ! uzh Wind speed at half-level grid
